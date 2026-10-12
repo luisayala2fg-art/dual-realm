@@ -1723,4 +1723,54 @@ document.getElementById('mobile-start').addEventListener('click',()=>{view('tabl
 document.addEventListener('click',e=>{const b=e.target.closest('[data-tab]');if(b)setTimeout(()=>view(b.dataset.tab),0)},true);
 setTimeout(()=>{const sel=document.getElementById('table-deck');status.textContent=sel&&sel.options.length?'Ready · '+sel.options.length+' deck(s) available':'Deck initialization failed · try starter deck button';},400);
 })();
-</script></body></html>
+</script><style>
+/* DUAL REALM V10: touch-friendly controls, only on narrow screens */
+#v10-dock,#v10-sheet{display:none}
+@media(max-width:800px){
+ body.v10-table-open{padding-bottom:calc(94px + env(safe-area-inset-bottom,0px))}
+ body.v10-table-open #v10-dock{display:block;position:fixed;left:0;right:0;bottom:0;z-index:45;background:#0b1e2bf5;border-top:1px solid #5a9d9a;box-shadow:0 -8px 30px #0009;padding:8px 10px calc(8px + env(safe-area-inset-bottom,0px));backdrop-filter:blur(12px)}
+ #v10-dock .v10-status{font-size:11px;color:#a3c9ce;margin:0 0 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+ #v10-dock .v10-buttons{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:5px}
+ #v10-dock button{padding:10px 1px;font-size:11px;min-width:0;background:#234653;border-color:#457c80;border-radius:10px}
+ #v10-dock button.v10-main{background:#82e4c7;color:#09211f;border:0}
+ body.v10-table-open #v10-sheet.v10-open{display:flex;position:fixed;inset:0;z-index:48;background:#0009;align-items:flex-end;justify-content:center}
+ #v10-sheet .v10-panel{width:100%;max-height:min(70dvh,600px);overflow-y:auto;background:#102839;border:1px solid #579b9b;border-radius:20px 20px 0 0;padding:15px 15px calc(20px + env(safe-area-inset-bottom,0px));box-shadow:0 -10px 30px #000a}
+ #v10-sheet .v10-panel h3{margin:0 0 10px;font-size:17px}
+ #v10-sheet .v10-choices{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+ #v10-sheet .v10-choices button{text-align:left;min-height:47px;padding:10px;font-size:12px;overflow-wrap:anywhere}
+ #v10-sheet .v10-close{float:right;background:#28495b}
+ #v10-sheet .v10-help{font-size:12px;color:#b5d2d9;margin:0 0 12px}
+}
+</style>
+<div id="v10-dock" aria-label="Mobile gameplay actions"><div class="v10-status" id="v10-status">Tap a card, or choose an action</div><div class="v10-buttons"><button type="button" data-v10="evolve">⬆ Evolve</button><button type="button" data-v10="ability">⚡ Ability</button><button type="button" data-v10="trainer">▣ Trainer</button><button type="button" data-v10="more">⋯ More</button><button type="button" class="v10-main" data-v10="turn">End turn</button></div></div>
+<div id="v10-sheet" role="dialog" aria-modal="true" aria-label="Quick actions"><div class="v10-panel"><button class="v10-close" type="button" id="v10-close">✕ Close</button><h3 id="v10-title">Quick actions</h3><p class="v10-help" id="v10-help"></p><div class="v10-choices" id="v10-choices"></div></div></div>
+<script>
+(function(){
+'use strict';
+const $=id=>document.getElementById(id), sheet=$('v10-sheet'), choices=$('v10-choices');
+const hand=() => [...document.querySelectorAll('#hand-zone .game-card[data-carduid]')];
+const play=() => [...document.querySelectorAll('#active-zone .game-card[data-carduid],#bench-zone .game-card[data-carduid]')];
+const label=el=>el?.getAttribute('title')||el?.querySelector('.fallback-name')?.textContent||'Card';
+function active(){const table=$('view-table');const visible=table&&(table.classList.contains('active')||table.style.display==='block');document.body.classList.toggle('v10-table-open',!!visible);if(!visible)close();}
+function close(){sheet.classList.remove('v10-open')}
+function open(title,help){$('v10-title').textContent=title;$('v10-help').textContent=help;choices.replaceChildren();sheet.classList.add('v10-open')}
+function add(text,fn){const b=document.createElement('button');b.type='button';b.textContent=text;b.onclick=fn;choices.appendChild(b)}
+function noItems(){if(!choices.children.length)add('No matching cards or actions available',()=>{});}
+function triggerAction(card,patterns){close();card.click();requestAnimationFrame(()=>{const actions=[...document.querySelectorAll('#inspect-actions [data-action]')];const a=actions.find(b=>patterns.some(p=>p.test(b.dataset.action||'')||p.test(b.textContent||'')));if(a)a.click();else {open('Action not available','This card has no supported action here. Some effects require manual resolution.');add('Close',close)}})}
+function pickCards(title,help,cards,patterns){open(title,help);cards.forEach(card=>add(label(card),()=>triggerAction(card,patterns)));noItems()}
+function command(name){
+ if(name==='evolve'){pickCards('Evolve Pokémon','Select a Pokémon already in play. The simulator will offer valid evolution cards from your hand.',play(),[/^evolve$/,/evolve/i]);return}
+ if(name==='ability'){pickCards('Use Pokémon Ability','Select a Pokémon in play. Only implemented abilities can resolve automatically.',play(),[/^ability$/,/ability/i]);return}
+ if(name==='trainer'){pickCards('Play a Trainer','Select the Trainer card from your hand.',hand().filter(c=>/trainer|supporter|item|stadium/i.test(c.textContent+' '+label(c))),[/play-trainer/,/trainer/i]);return}
+ if(name==='turn'){open('End your turn?','This advances the turn and may draw a card.');add('Yes, end turn',()=>{close();$('next-turn')?.click()});add('Cancel',close);return}
+ if(name==='more'){open('More tabletop actions','Tap a card to see its actions, or choose a shortcut.');add('Draw a card',()=>{close();$('draw-btn')?.click()});add('Undo',()=>{close();$('undo-btn')?.click()});add('Load missing card art',()=>{close();$('load-art')?.click()});add('Attack / Retreat',()=>pickCards('Active Pokémon actions','Choose your Active Pokémon, then use the action panel.',[...document.querySelectorAll('#active-zone .game-card[data-carduid]')],[/attack/,/retreat/]));add('Selected card actions',()=>selectedActions());return}
+ }
+ function selectedActions(){open('Selected card actions','Choose an action for your currently selected card.');[...document.querySelectorAll('#inspect-actions [data-action]')].forEach(a=>add(a.textContent,()=>{close();a.click()}));noItems()}
+ document.querySelectorAll('[data-v10]').forEach(b=>b.addEventListener('click',()=>command(b.dataset.v10)));
+ $('v10-close').onclick=close;sheet.addEventListener('click',e=>{if(e.target===sheet)close()});
+ document.addEventListener('keydown',e=>{if(e.key==='Escape')close()});
+ document.addEventListener('click',e=>{if(e.target.closest('[data-tab],[data-mobile-view],.game-choice'))setTimeout(active,50);const card=e.target.closest('#hand-zone .game-card,#active-zone .game-card,#bench-zone .game-card');if(card)$('v10-status').textContent='Selected: '+label(card)+' · tap More → Selected card actions';});
+ new MutationObserver(active).observe($('view-table'),{attributes:true,attributeFilter:['class','style']});active();
+})();
+</script>
+</body></html>
