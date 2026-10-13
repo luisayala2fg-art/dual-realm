@@ -1773,4 +1773,77 @@ function command(name){
  new MutationObserver(active).observe($('view-table'),{attributes:true,attributeFilter:['class','style']});active();
 })();
 </script>
+<!-- V12 phase 1: deck-list inspection and accessible artwork zoom -->
+<style>
+#deck-contents .deck-line .v12-card-inspect{appearance:none;border:0;background:transparent;color:inherit;text-align:left;padding:3px 2px;min-width:0;cursor:pointer;font:inherit;line-height:1.35}
+#deck-contents .deck-line .v12-card-inspect:hover{text-decoration:underline;text-underline-offset:3px}
+#deck-contents .deck-line .v12-card-inspect:focus-visible{outline:2px solid #6edbd4;outline-offset:3px;border-radius:4px}
+#v12-zoom-btn{margin-top:9px;width:100%;min-height:42px}
+#v12-zoom-overlay{position:fixed;inset:0;z-index:99999;background:rgba(3,8,19,.95);display:none;align-items:center;justify-content:center;flex-direction:column;padding:18px;gap:12px;color:white}
+#v12-zoom-overlay.v12-open{display:flex}
+#v12-zoom-overlay img{max-width:min(92vw,620px);max-height:78vh;object-fit:contain;border-radius:12px;box-shadow:0 15px 50px #0008}
+#v12-zoom-overlay .v12-controls{display:flex;gap:12px;align-items:center;flex-wrap:wrap;justify-content:center}
+#v12-zoom-overlay button{padding:11px 20px;cursor:pointer}
+#v12-zoom-overlay .v12-title{text-align:center;font-weight:700}
+</style>
+<div id="v12-zoom-overlay" role="dialog" aria-modal="true" aria-label="Enlarged card artwork" tabindex="-1"><div class="v12-controls"><span class="v12-title" id="v12-zoom-title"></span><button type="button" id="v12-zoom-close">✕ Close</button></div><img id="v12-zoom-image" alt=""><div id="v12-zoom-note" class="smalltext" style="text-align:center"></div></div>
+<script>
+(function(){
+ 'use strict';
+ const list=document.getElementById('deck-contents');
+ const overlay=document.getElementById('v12-zoom-overlay');
+ const zoomBtn=document.createElement('button');zoomBtn.type='button';zoomBtn.id='v12-zoom-btn';zoomBtn.className='small subtle';zoomBtn.textContent='🔍 Enlarge selected artwork';
+ document.getElementById('inspect-image')?.insertAdjacentElement('afterend',zoomBtn);
+ function enhance(){
+   for(const line of list.querySelectorAll('.deck-line')){
+     if(line.querySelector('.v12-card-inspect'))continue;
+     const content=line.querySelector('.qty + div');if(!content)continue;
+     const name=content.querySelector('div');if(!name)continue;
+     const btn=document.createElement('button');btn.type='button';btn.className='v12-card-inspect';btn.textContent=name.textContent;
+     name.replaceWith(btn);
+   }
+ }
+ function chosenCard(button){
+   const line=button.closest('.deck-line');const title=button.textContent.trim();
+   const setLine=line?.querySelector('.sub')?.textContent.trim()||'';
+   const d=typeof getDeck==='function'?getDeck():null;
+   const cards=d?.cards||[];
+   return cards.find(c=>c.name===title&&((c.set||'')+' '+(c.number||'')).trim()===setLine)||cards.find(c=>c.name===title);
+ }
+ list.addEventListener('click',e=>{
+   const btn=e.target.closest('.v12-card-inspect');if(!btn)return;
+   const card=chosenCard(btn);if(!card)return;
+   inspect(card,'deck-studio');
+   document.getElementById('inspector')?.scrollIntoView({behavior:'smooth',block:'nearest'});
+ });
+ function openZoom(){
+   // Read the rendered inspector, which is the source of truth for the user's current selection.
+   const panel=document.getElementById('inspect-image');
+   const title=document.getElementById('inspect-name')?.textContent?.trim()||'';
+   const detail=document.getElementById('inspect-kind')?.textContent?.trim()||'';
+   if(!title||title==='Nothing selected'){
+     alert('Select a card in Deck Studio or on the tabletop first.');return;
+   }
+   const sourceImage=panel?.querySelector('img');
+   const src=sourceImage?.currentSrc||sourceImage?.getAttribute('src')||'';
+   const img=document.getElementById('v12-zoom-image');
+   document.getElementById('v12-zoom-title').textContent=title+(detail?' · '+detail:'');
+   document.getElementById('v12-zoom-note').textContent=src?'Enlarged saved card image. Exact-print matching is still under development.':'This card has no saved artwork yet. Use artwork lookup when online.';
+   img.style.display=src?'block':'none';
+   if(src){img.src=src;img.alt=title;}else{img.removeAttribute('src');img.alt='';}
+   overlay.classList.add('v12-open');overlay.focus();
+ }
+ function closeZoom(){overlay.classList.remove('v12-open');document.getElementById('v12-zoom-image').removeAttribute('src')}
+ zoomBtn.addEventListener('click',openZoom);
+ document.getElementById('inspect-image')?.addEventListener('click',openZoom);
+ document.getElementById('v12-zoom-close').addEventListener('click',closeZoom);
+ overlay.addEventListener('click',e=>{if(e.target===overlay)closeZoom()});
+ document.addEventListener('keydown',e=>{if(e.key==='Escape'&&overlay.classList.contains('v12-open'))closeZoom()});
+ let pressTimer=null;
+ const preview=document.getElementById('inspect-image');
+ preview?.addEventListener('touchstart',()=>{pressTimer=setTimeout(openZoom,550)},{passive:true});
+ for(const event of ['touchend','touchcancel','touchmove'])preview?.addEventListener(event,()=>clearTimeout(pressTimer),{passive:true});
+ new MutationObserver(enhance).observe(list,{childList:true,subtree:true});enhance();
+})();
+</script>
 </body></html>
